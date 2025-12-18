@@ -1,0 +1,229 @@
+﻿<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SecretBox | QC Department</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Plus Jakarta Sans', sans-serif; background: #f8fafc; }
+        .glass { background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(10px); border: 1px solid rgba(226, 232, 240, 0.8); }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+    </style>
+</head>
+<body class="min-h-screen pb-12">
+
+    <nav class="sticky top-0 z-50 glass mb-8">
+        <div class="max-w-6xl mx-auto px-6 py-4 flex justify-between items-center">
+            <h1 class="text-xl font-800 text-slate-900 tracking-tighter">SECRET<span class="text-indigo-600">BOX.</span></h1>
+            <div id="active-user-badge" class="hidden flex items-center gap-2 bg-indigo-50 px-3 py-1.5 rounded-full border border-indigo-100">
+                <div class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                <span id="display-name" class="text-xs font-bold text-indigo-700 uppercase tracking-wider"></span>
+                <button id="btn-logout" class="ml-2 text-slate-400 hover:text-red-500 transition-colors">
+                    Logout
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <div class="max-w-6xl mx-auto px-4 md:px-6">
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            
+            <div class="lg:col-span-4 space-y-6">
+                <section id="auth-section" class="bg-white p-6 rounded-[2rem] shadow-xl border border-slate-100">
+                    <h2 class="text-sm font-bold text-slate-400 uppercase tracking-widest mb-4">Akses Inbox</h2>
+                    <div class="space-y-3">
+                        <select id="user-select" class="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500">
+                            <option value="" disabled selected>Pilih Nama Anda</option>
+                        </select>
+                        <div class="relative">
+                            <input type="password" id="key-input" placeholder="PIN Rahasia" class="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500">
+                            <button id="btn-unlock" class="absolute right-2 top-2 bottom-2 bg-slate-900 text-white px-5 rounded-xl font-bold hover:bg-indigo-600 transition-all">Buka</button>
+                        </div>
+                    </div>
+                </section>
+
+                <section id="send-section" class="bg-white p-6 rounded-[2rem] shadow-xl border border-slate-100 opacity-40 pointer-events-none">
+                    <h2 class="text-sm font-bold text-slate-400 uppercase tracking-widest mb-4">Kirim Pesan Anonim</h2>
+                    <div class="space-y-4">
+                        <select id="recipient-select" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none">
+                            <option value="" disabled selected>Pilih Penerima</option>
+                        </select>
+                        <textarea id="message-content" rows="4" placeholder="Tulis pesan rahasia..." class="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 resize-none"></textarea>
+                        <button id="btn-send" class="w-full bg-indigo-600 text-white py-4 rounded-2xl font-bold hover:bg-indigo-700 shadow-lg transition-all active:scale-95">
+                            Kirim Sekarang
+                        </button>
+                    </div>
+                </section>
+            </div>
+
+            <div class="lg:col-span-8">
+                <div class="bg-white rounded-[2.5rem] shadow-2xl min-h-[500px] flex flex-col overflow-hidden border border-white">
+                    <div class="p-8 border-b border-slate-50 flex justify-between items-end">
+                        <h2 class="text-3xl font-800 text-slate-900">Kotak Masuk</h2>
+                        <div id="count-badge" class="hidden px-4 py-1 bg-indigo-600 text-white rounded-full text-xs font-bold">0 Pesan</div>
+                    </div>
+                    <div id="inbox-container" class="flex-1 p-8 space-y-4 overflow-y-auto max-h-[600px] hide-scrollbar">
+                        <div id="state-locked" class="text-center py-20">
+                            <p class="text-slate-300 text-5xl">🔒</p>
+                            <p class="text-slate-400 mt-4">Silakan buka akses untuk melihat pesan</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, query, where, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // KONFIGURASI FIREBASE ANDA
+        const firebaseConfig = {
+            apiKey: "AIzaSyCGBwM0N9xdnIHbcGXn2lqAv_Q-08HSvMs",
+            authDomain: "secret-box-qc.firebaseapp.com",
+            projectId: "secret-box-qc",
+            storageBucket: "secret-box-qc.firebasestorage.app",
+            messagingSenderId: "1092511882138",
+            appId: "1:1092511882138:web:ed1ee4adb127ba725e7823"
+        };
+
+        const MEMBERS = [
+            { name: 'Aep Saepudin', key: 'aps123' }, { name: 'Martina', key: 'mht234' },
+            { name: 'Katherine', key: 'kal345' }, { name: 'Trixie', key: 'tpp456' },
+            { name: 'Rizki Angga', key: 'raa567' }, { name: 'Serly', key: 'sgt678' },
+            { name: 'Dela', key: 'dme789' }, { name: 'Aim', key: 'aim890' },
+            { name: 'Anggita', key: 'apz901' }, { name: 'Vidya', key: 'avv012' },
+            { name: 'Bias', key: 'bkr123' }, { name: 'Dian', key: 'dfy234' },
+            { name: 'Fanny', key: 'fdg345' }, { name: 'Fafa', key: 'fzr456' },
+            { name: 'Hana', key: 'hkh567' }, { name: 'Irma', key: 'iff678' },
+            { name: 'Bu Yuni', key: 'swh789' }, { name: 'Lulut', key: 'ldj890' },
+            { name: 'Lusiana', key: 'lde901' }, { name: 'Muthia', key: 'muf012' },
+            { name: 'Nadira', key: 'nav123' }, { name: 'Ryan', key: 'ink234' },
+            { name: 'Pradia', key: 'pep345' }, { name: 'Alvina', key: 'avj456' },
+            { name: 'Rafly', key: 'rbl567' }, { name: 'Reyhan', key: 'mrx678' },
+            { name: 'Riskayati', key: 'rat789' }, { name: 'Shasa', key: 'shs890' },
+            { name: 'Anin', key: 'aza901' }, { name: 'Assa', key: 'aaz012' },
+            { name: 'Cakra', key: 'cfh123' }, { name: 'Nhimas', key: 'nml234' },
+            { name: 'Putri', key: 'psa345' }, { name: 'Run', key: 'run456' },
+            { name: 'Rara', key: 'tnt567' }, { name: 'Raia', key: 'rcl678' },
+            { name: 'Kenny', key: 'rkc789' }, { name: 'Dani', key: 'rax890' },
+            { name: 'Salma', key: 'sdt901' }, { name: 'Syahel', key: 'nzw012' },
+            { name: 'Yaya', key: 'ddc123' }, { name: 'Zahra', key: 'ajm234' },
+            { name: 'Dimas', key: 'dim345' }, { name: 'Suhendar', key: 'suh456' }
+        ];
+
+        let db, unsubscribe = null;
+
+        async function startApp() {
+            try {
+                const app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                const auth = getAuth(app);
+                await signInAnonymously(auth);
+
+                const uSel = document.getElementById('user-select');
+                const rSel = document.getElementById('recipient-select');
+                
+                // Menghapus isi lama dan mengisi dropdown
+                uSel.innerHTML = '<option value="" disabled selected>Pilih Nama Anda</option>';
+                rSel.innerHTML = '<option value="" disabled selected>Pilih Penerima</option>';
+
+                MEMBERS.sort((a,b) => a.name.localeCompare(b.name)).forEach(m => {
+                    uSel.add(new Option(m.name, m.name));
+                    rSel.add(new Option(m.name, m.name));
+                });
+
+                console.log("Firebase & Dropdown Ready");
+            } catch (e) {
+                console.error("Gagal inisialisasi:", e);
+                alert("Koneksi Internet bermasalah atau Firebase Error.");
+            }
+        }
+
+        // UNLOCK ACTION
+        document.getElementById('btn-unlock').onclick = () => {
+            const name = document.getElementById('user-select').value;
+            const key = document.getElementById('key-input').value;
+            const match = MEMBERS.find(m => m.name === name && m.key === key);
+
+            if (match) {
+                document.getElementById('auth-section').classList.add('hidden');
+                document.getElementById('active-user-badge').classList.remove('hidden');
+                document.getElementById('display-name').textContent = name;
+                document.getElementById('send-section').style.opacity = "1";
+                document.getElementById('send-section').style.pointerEvents = "auto";
+                listenMessages(name);
+            } else {
+                alert("PIN atau Nama salah!");
+            }
+        };
+
+        // LOGOUT
+        document.getElementById('btn-logout').onclick = () => location.reload();
+
+        // READ MESSAGES
+        function listenMessages(userName) {
+            if (unsubscribe) unsubscribe();
+            const container = document.getElementById('inbox-container');
+            container.innerHTML = '<p class="text-center py-10">Mencari pesan...</p>';
+
+            const q = query(collection(db, "messages"), where("to", "==", userName));
+
+            unsubscribe = onSnapshot(q, (snap) => {
+                const msgs = [];
+                snap.forEach(doc => msgs.push(doc.data()));
+                msgs.sort((a, b) => (b.at?.seconds || 0) - (a.at?.seconds || 0));
+                
+                const badge = document.getElementById('count-badge');
+                if(msgs.length > 0) {
+                    badge.classList.remove('hidden');
+                    badge.textContent = `${msgs.length} Pesan`;
+                    container.innerHTML = msgs.map(m => `
+                        <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
+                            <p class="text-slate-700">${m.txt}</p>
+                            <div class="mt-3 text-[10px] text-indigo-400 font-bold uppercase">
+                                Anonymous • ${m.at ? new Date(m.at.seconds * 1000).toLocaleTimeString() : 'Baru saja'}
+                            </div>
+                        </div>
+                    `).join('');
+                } else {
+                    container.innerHTML = '<p class="text-center py-20 text-slate-400">Belum ada pesan masuk.</p>';
+                    badge.classList.add('hidden');
+                }
+            });
+        }
+
+        // SEND MESSAGE
+        document.getElementById('btn-send').onclick = async () => {
+            const to = document.getElementById('recipient-select').value;
+            const txt = document.getElementById('message-content').value.trim();
+            const btn = document.getElementById('btn-send');
+
+            if (!to || !txt) return alert("Lengkapi penerima dan pesan!");
+
+            btn.disabled = true;
+            btn.textContent = "Mengirim...";
+
+            try {
+                await addDoc(collection(db, "messages"), {
+                    to: to,
+                    txt: txt,
+                    at: serverTimestamp()
+                });
+                document.getElementById('message-content').value = "";
+                alert("Pesan terkirim!");
+            } catch (e) {
+                alert("Gagal kirim: " + e.message);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = "Kirim Sekarang";
+            }
+        };
+
+        startApp();
+    </script>
+</body>
+</html>
